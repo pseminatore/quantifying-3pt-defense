@@ -1,0 +1,5 @@
+Time holding ball before shot
+defenders within x distance
+how much defender is obscuring shot
+distance from hoop
+See if I can build model to identify cross court pass
