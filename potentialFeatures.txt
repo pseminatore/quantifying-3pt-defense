@@ -3,3 +3,9 @@ defenders within x distance
 how much defender is obscuring shot
 distance from hoop
 See if I can build model to identify cross court pass
+
+Defender and shooter velocity/acceleration prior to shot
+Shooting zone (corner/top/wings)
+Offensive spacing(possibly indicating kickout)
+Identifying specific shooting scenarios (behind screen, set shooter, kickout...)
+Man vs zone Defense?
