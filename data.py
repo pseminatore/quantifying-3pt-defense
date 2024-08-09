@@ -1,17 +1,26 @@
 import pandas as pd
+from constants import FILE_LOCATIONS
 
 
 def read_locations(train=True):
-    pass 
+    file_path = FILE_LOCATIONS['train']['locations'] if train else FILE_LOCATIONS['test']['locations']
+    df =  pd.read_csv(file_path)
+    df['play_iid'] = df.apply(lambda row: f'{row['game_id']}-{row['play_id']}', axis=1)
+    return df
 
 def read_pbp(train=True):
-    pass
+    file_path = FILE_LOCATIONS['train']['pbp'] if train else FILE_LOCATIONS['test']['pbp']
+    df = pd.read_csv(file_path)
+    df['play_iid'] = df.apply(lambda row: f'{row['game_id']}-{row['play_id']}', axis=1)
+    return df
 
 def read_tracking(train=True):
-    pass
+    file_path = FILE_LOCATIONS['train']['tracking'] if train else FILE_LOCATIONS['test']['tracking']
+    df = pd.read_csv(file_path)
+    df['play_iid'] = df.apply(lambda row: f'{row['game_id']}-{row['play_id']}', axis=1)
+    return df
 
-
-def read_train_data(loc=True, pbp=True, tracking=True):
+def read_data(locations=True, pbp=True, tracking=True, train=True):
     """
     Read in training data
     
@@ -21,9 +30,9 @@ def read_train_data(loc=True, pbp=True, tracking=True):
         each corresponding to DF or None with data file 
     
     """
-    loc_data = read_locations() if loc else None
-    pbp_data = read_pbp() if pbp else None
-    tracking_data = read_tracking() if tracking else None
+    loc_data = read_locations(train) if locations else None
+    pbp_data = read_pbp(train) if pbp else None
+    tracking_data = read_tracking(train) if tracking else None
     
     ret_obj = {'loc': loc_data, 'pbp': pbp_data, 'tracking': tracking_data}
     
