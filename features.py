@@ -1,7 +1,18 @@
-import pandas as pd
 from constants import HOOP_LOCATIONS, MIDPOINT
 from math import sqrt
+from sklearn.model_selection import train_test_split
+from data import read_data
 
+
+def create_feature_df(train=True, test_size=0.2):
+    data = read_data(tracking=False, train=train)
+    feature_df = get_play_metadata(data['pbp'])
+    feature_df = get_distance_from_hoop(feature_df, data['loc'])
+    if train:
+        feature_df, test_df = train_test_split(feature_df, test_size=test_size, random_state=42)
+    else:
+        test_df = None
+    return feature_df, test_df
 
 
 def get_play_metadata(pbp):
@@ -34,7 +45,9 @@ def dist_from_hoop(row, side='L'):
 
 """
 All functions below this comment must take at least the feature DF as a param
-    and return a single column
+    and return the same feature DF with the added feature column.
+    
+The format of these feature columns is subject to change.
 """
 
 def get_distance_from_hoop(feature_df, locations):

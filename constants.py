@@ -27,4 +27,6 @@ FILE_LOCATIONS = {
     }
 }
 
-MODEL_OUTPUT_LOCATION = 'model/{iteration}_{prod}'         
+MODEL_OUTPUT_LOCATION = 'model/{iteration}_{prod}.txt'   
+
+MODEL_SCORES_LOCATION = 'model/model_scores.json'      
