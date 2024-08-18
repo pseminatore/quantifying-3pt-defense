@@ -5,19 +5,19 @@ from constants import FILE_LOCATIONS
 def read_locations(train=True):
     file_path = FILE_LOCATIONS['train']['locations'] if train else FILE_LOCATIONS['test']['locations']
     df =  pd.read_csv(file_path)
-    df['play_iid'] = df.apply(lambda row: f'{row['game_id']}-{row['play_id']}', axis=1)
+    df['play_iid'] = df['game_id'].astype(str) + '-' + df['play_id'].astype(str)
     return df
 
 def read_pbp(train=True):
     file_path = FILE_LOCATIONS['train']['pbp'] if train else FILE_LOCATIONS['test']['pbp']
     df = pd.read_csv(file_path)
-    df['play_iid'] = df.apply(lambda row: f'{row['game_id']}-{row['play_id']}', axis=1)
+    df['play_iid'] = df['game_id'].astype(str) + '-' + df['play_id'].astype(str)
     return df
 
 def read_tracking(train=True):
     file_path = FILE_LOCATIONS['train']['tracking'] if train else FILE_LOCATIONS['test']['tracking']
     df = pd.read_csv(file_path)
-    df['play_iid'] = df.apply(lambda row: f'{row['game_id']}-{row['play_id']}', axis=1)
+    df['play_iid'] = df['game_id'].astype(str) + '-' + df['play_id'].astype(str)
     return df
 
 def read_data(locations=True, pbp=True, tracking=True, train=True):
