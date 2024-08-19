@@ -1,8 +1,10 @@
 from matplotlib import animation
 from matplotlib import pyplot as plt
 from matplotlib.patches import Circle, Rectangle, Arc
-from data import read_tracking
+from data import read_tracking, read_locations
 import pandas as pd
+import numpy as np
+
 
 def get_play_df(game_id,play_id):
     df = read_tracking()
@@ -14,11 +16,48 @@ def get_play_df(game_id,play_id):
     return df_offense, df_defense, df_shooter
 
 
+def calculate_distance(x1, y1, x2, y2):
+    return np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+
+def find_best_frame(df_offense, df_shooter, teammates):
+    """
+    Find the frame where all players are closest to their shooting positions.
+    
+    :param df_offense: DataFrame containing offensive player positions
+    :param df_shooter: DataFrame containing shooter positions
+    :param teammates: DataFrame containing teammate shot locations
+    :return: The frame where the sum of distances for all players is minimized
+    """
+    # Calculate distance to each shot location and assign the closest
+    for i, teammate in teammates.iterrows():
+        df_offense[f'distance_to_{teammate["annotation_code"]}'] = df_offense.apply(
+            lambda row: calculate_distance(row['x_smooth'], row['y_smooth'], 
+                                           teammate['court_x'], teammate['court_y']), axis=1)
+    
+    # Find the closest location for each player at each frame
+    df_offense['min_distance'] = df_offense[[f'distance_to_{t}' for t in teammates['annotation_code']]].min(axis=1)
+
+    # Calculate the distance for the shooter
+    shooter_position = (df_shooter['x_smooth'].values[0], df_shooter['y_smooth'].values[0])
+    df_shooter['distance_to_shot'] = df_shooter.apply(
+        lambda row: calculate_distance(row['x_smooth'], row['y_smooth'], 
+                                       shooter_position[0], shooter_position[1]), axis=1)
+
+    # Sum distances for each frame (offense + shooter)
+    df_total_distance = df_offense.groupby('frame')['min_distance'].sum() + \
+                        df_shooter.groupby('frame')['distance_to_shot'].sum()
+
+    # Find the frame with the minimum total distance
+    best_frame = df_total_distance.idxmin()
+    min_distance = df_total_distance.min()
+    
+    return best_frame, min_distance
+
 
 def create_ncaa_full_court(ax=None, three_line='mens', court_color='#dfbb85',
                            lw=3, lines_color='black', lines_alpha=0.5,
                            paint_fill='blue', paint_alpha=0.4,
-                           inner_arc=False):
+                           inner_arc=False, margin=2):
     """
     Version 2020.2.19
     Creates NCAA Basketball Court
@@ -257,8 +296,8 @@ def create_ncaa_full_court(ax=None, three_line='mens', court_color='#dfbb85',
     ax.add_patch(boarder)
     
     # Plot Limit
-    ax.set_xlim(0, 94)
-    ax.set_ylim(0, 50)
+    ax.set_xlim(-margin, 94 + margin)  # Court length is 94 feet
+    ax.set_ylim(-margin, 50 + margin)
     ax.set_facecolor(court_color)
     ax.set_xticks([])
     ax.set_yticks([])
@@ -268,19 +307,24 @@ def create_ncaa_full_court(ax=None, three_line='mens', court_color='#dfbb85',
 
 
 
-def animate_play(game_id, play_id,example=False):
+def animate_play(game_id, play_id,example=False,smooth=True, shot_loc=True,show_closest_frame=False):
     if example == False:
         df_offense, df_defense, df_shooter = get_play_df(game_id, play_id)
     else:
         df_play =  pd.read_csv('example_play.csv')
         df_play['play_iid'] = df_play['game_id'].astype(str) + '-' + df_play['play_id'].astype(str)
         
-
         df_offense = df_play[df_play['type'] == 'teammate']
         df_defense = df_play[df_play['type'] == 'defender']
         df_shooter = df_play[df_play['type'] == 'shooter']
 
-    window = 9
+
+    
+    if smooth == True:
+        window = 7
+    else: 
+        window = 1
+
     df_offense['x_smooth'] = df_offense['x'].rolling(window=window).mean()
     df_offense['y_smooth'] = df_offense['y'].rolling(window=window).mean()
 
@@ -297,13 +341,61 @@ def animate_play(game_id, play_id,example=False):
 
     fig, ax = plt.subplots(figsize=(15, 8))
     create_ncaa_full_court(ax,
-                        three_line='both',
+                        three_line='mens',
                         paint_alpha=0.4,
-                        inner_arc=True)
+                        inner_arc=True,margin=5)
     marker_kwargs = {'marker': 'o', 'markeredgecolor': 'black', 'linestyle': 'None'}
     offense, = ax.plot([], [], ms=10, markerfacecolor='#b94b75', **marker_kwargs)  # red/maroon
     defense, = ax.plot([], [], ms=10, markerfacecolor='#7f63b8', **marker_kwargs)  # purple
     shooter, = ax.plot([], [], ms=12, markerfacecolor='yellow', **marker_kwargs)  # yellow for shooter
+
+    if shot_loc == True:
+        if example == True:
+            df_loc = pd.read_csv('example_shot.csv')
+            
+        else:
+            df = read_locations()
+            df_loc = df[(df['game_id'] == game_id) & (df['play_id'] == play_id)]
+        shot = df_loc[(df_loc['annotation_code'] == 's')]
+        teammates = df_loc[df_loc['annotation_code'].isin(['t1', 't2', 't3', 't4'])]
+
+        # Create a dictionary for shot positions
+        shot = df_loc[df_loc['annotation_code'] == 's']
+        teammates = df_loc[df_loc['annotation_code'].isin(['t1', 't2', 't3', 't4'])]
+
+        # Find the frame where all players are closest to their shooting positions
+        best_frame, min_distance = find_best_frame(df_offense, df_shooter, teammates)
+        print(f"Best frame where all players are closest to their positions: {best_frame}, Total Distance: {min_distance}")
+
+
+        if show_closest_frame:
+    # Find the positions for the closest frame
+                closest_positions_offense = df_offense[df_offense['frame'] == best_frame]
+                closest_positions_shooter = df_shooter[df_shooter['frame'] == best_frame]
+
+                
+                # Plot positions of offensive players
+                ax.plot(closest_positions_offense['x_smooth'], closest_positions_offense['y_smooth'], 
+                        'o', markerfacecolor='#b94b75', markeredgecolor='black', markersize=10, linestyle='None', label='Offense')
+
+                # Plot position of the shooter
+                ax.plot(closest_positions_shooter['x_smooth'], closest_positions_shooter['y_smooth'], 
+                        'o', markerfacecolor='yellow', markeredgecolor='black', markersize=12, linestyle='None', label='Shooter')
+
+
+                for _, row in teammates.iterrows():
+                        ax.plot(row['court_x'], row['court_y'], 
+                        marker='o', color='blue', markersize=8, linestyle='None', label=f"Teammate {row['annotation_code']}")
+
+                if not shot.empty:
+                        ax.plot(shot['court_x'].values[0], shot['court_y'].values[0], 
+                        marker='x', color='red', markersize=12, linestyle='None', label='Shot Location')
+                # Optionally add legends and other details
+                ax.legend(loc='upper right')
+                plt.show()
+                return
+
+        
 
 
     positions_offense = df_offense.groupby('frame')[['x_smooth', 'y_smooth']].apply(lambda x: (x['x_smooth'].values, x['y_smooth'].values)).to_dict()
@@ -320,13 +412,21 @@ def animate_play(game_id, play_id,example=False):
         defense.set_data(*positions_defense.get(frame, ([], [])))
         shooter.set_data(*positions_shooter.get(frame, ([], [])))
         
+        for _, row in teammates.iterrows():
+                ax.plot(row['court_x'], row['court_y'], 
+                marker='x', color='blue', markersize=8, linestyle='None', label=f"Teammate {row['annotation_code']}")
+
+        if not shot.empty:
+                ax.plot(shot['court_x'].values[0], shot['court_y'].values[0], 
+                marker='x', color='red', markersize=12, linestyle='None', label='Shot Location')
+
         return offense, defense, shooter
 
-    anim = animation.FuncAnimation(fig, animate, frames=len(df_defense['frame'].unique()), interval=50, blit=True)
+    anim = animation.FuncAnimation(fig, animate, frames=len(df_defense['frame'].unique()), interval=70, blit=True)
     plt.show()
 
 
-animate_play(19783001319551,6,True)
+animate_play(19783001319551,6,example = True, smooth = True,show_closest_frame=True)
 
 
 
@@ -350,3 +450,4 @@ game_id,play_id,annotation_code,court_x,court_y
 ''' sample play data for reference: tracking
 game_id,play_id,type,frame,x,y,tracklet_id
 '''
+#72316
