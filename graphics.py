@@ -1,57 +1,12 @@
 from matplotlib import animation
 from matplotlib import pyplot as plt
 from matplotlib.patches import Circle, Rectangle, Arc
-from data import read_tracking, read_locations
+from data import read_tracking, read_locations, find_best_frame, get_play_df
 import pandas as pd
 import numpy as np
 
 
-def get_play_df(game_id,play_id):
-    df = read_tracking()
-    df_play = df[(df['game_id'] == game_id) & (df['play_id'] == play_id)]
-    df_offense = df_play[df_play['type'] == 'teammate']
-    df_defense = df_play[df_play['type'] == 'defender']
-    df_shooter = df_play[df_play['type'] == 'shooter']
 
-    return df_offense, df_defense, df_shooter
-
-
-def calculate_distance(x1, y1, x2, y2):
-    return np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-
-def find_best_frame(df_offense, df_shooter, teammates):
-    """
-    Find the frame where all players are closest to their shooting positions.
-    
-    :param df_offense: DataFrame containing offensive player positions
-    :param df_shooter: DataFrame containing shooter positions
-    :param teammates: DataFrame containing teammate shot locations
-    :return: The frame where the sum of distances for all players is minimized
-    """
-    # Calculate distance to each shot location and assign the closest
-    for i, teammate in teammates.iterrows():
-        df_offense[f'distance_to_{teammate["annotation_code"]}'] = df_offense.apply(
-            lambda row: calculate_distance(row['x_smooth'], row['y_smooth'], 
-                                           teammate['court_x'], teammate['court_y']), axis=1)
-    
-    # Find the closest location for each player at each frame
-    df_offense['min_distance'] = df_offense[[f'distance_to_{t}' for t in teammates['annotation_code']]].min(axis=1)
-
-    # Calculate the distance for the shooter
-    shooter_position = (df_shooter['x_smooth'].values[0], df_shooter['y_smooth'].values[0])
-    df_shooter['distance_to_shot'] = df_shooter.apply(
-        lambda row: calculate_distance(row['x_smooth'], row['y_smooth'], 
-                                       shooter_position[0], shooter_position[1]), axis=1)
-
-    # Sum distances for each frame (offense + shooter)
-    df_total_distance = df_offense.groupby('frame')['min_distance'].sum() + \
-                        df_shooter.groupby('frame')['distance_to_shot'].sum()
-
-    # Find the frame with the minimum total distance
-    best_frame = df_total_distance.idxmin()
-    min_distance = df_total_distance.min()
-    
-    return best_frame, min_distance
 
 
 def create_ncaa_full_court(ax=None, three_line='mens', court_color='#dfbb85',
@@ -356,15 +311,14 @@ def animate_play(game_id, play_id,example=False,smooth=True, shot_loc=True,show_
         else:
             df = read_locations()
             df_loc = df[(df['game_id'] == game_id) & (df['play_id'] == play_id)]
-        shot = df_loc[(df_loc['annotation_code'] == 's')]
-        teammates = df_loc[df_loc['annotation_code'].isin(['t1', 't2', 't3', 't4'])]
+        
 
         # Create a dictionary for shot positions
         shot = df_loc[df_loc['annotation_code'] == 's']
         teammates = df_loc[df_loc['annotation_code'].isin(['t1', 't2', 't3', 't4'])]
 
         # Find the frame where all players are closest to their shooting positions
-        best_frame, min_distance = find_best_frame(df_offense, df_shooter, teammates)
+        best_frame, min_distance = find_best_frame(df_offense, df_shooter, teammates,shot)
         print(f"Best frame where all players are closest to their positions: {best_frame}, Total Distance: {min_distance}")
 
 
@@ -450,4 +404,4 @@ game_id,play_id,annotation_code,court_x,court_y
 ''' sample play data for reference: tracking
 game_id,play_id,type,frame,x,y,tracklet_id
 '''
-#72316
+#72319
