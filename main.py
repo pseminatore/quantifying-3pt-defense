@@ -1,5 +1,9 @@
 from features import create_feature_df
 from model import get_predictions
+import warnings
+warnings.filterwarnings("ignore")
+import pandas as pd
+pd.options.mode.chained_assignment = None
 
 
 def generate_submissions(model_file):
@@ -8,7 +12,7 @@ def generate_submissions(model_file):
 
 def test_model():
     feature_df, test_df = create_feature_df()
-    pred_df, score = get_predictions(rebuild_model=True, feature_df=feature_df, feature_cols=['shot_distance'], test_df=test_df, get_score=True)
+    pred_df, score = get_predictions(rebuild_model=True, feature_df=feature_df, feature_cols=['shot_distance', 'dist_from_nearest_defender', 'defenders_within_12_distance'], test_df=test_df, get_score=True)
     
 
 def run():

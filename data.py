@@ -165,5 +165,5 @@ def find_best_frame(df_offense, df_shooter, teammates, shooter):
     return best_frame, min_distance
     
 
-
-process_all_games_and_plays()
+if __name__ == '__main__':
+    process_all_games_and_plays()
