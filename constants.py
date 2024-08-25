@@ -29,4 +29,6 @@ FILE_LOCATIONS = {
 
 MODEL_OUTPUT_LOCATION = 'model/{iteration}_{prod}.txt'   
 
-MODEL_SCORES_LOCATION = 'model/model_scores.json'      
+MODEL_SCORES_LOCATION = 'model/model_scores.json' 
+
+FEATURE_CACHE_LOCATION = 'data/processed_features.csv'

@@ -11,8 +11,8 @@ def generate_submissions(model_file):
     pred_df, score = get_predictions(model_file=model_file, rebuild_model=False, test_df=feature_df, feature_cols=['shot_distance'])
 
 def test_model():
-    feature_df, test_df = create_feature_df()
-    pred_df, score = get_predictions(rebuild_model=True, feature_df=feature_df, feature_cols=['shot_distance', 'dist_from_nearest_defender', 'defenders_within_12_distance'], test_df=test_df, get_score=True)
+    feature_df, test_df = create_feature_df(cache_features=True)
+    pred_df, score = get_predictions(rebuild_model=True, feature_df=feature_df, feature_cols=['shot_distance', 'dist_from_nearest_defender'], test_df=test_df, get_score=True)
     
 
 def run():

@@ -1,16 +1,21 @@
-from constants import HOOP_LOCATIONS, MIDPOINT
+from constants import HOOP_LOCATIONS, MIDPOINT, FEATURE_CACHE_LOCATION
 from math import sqrt
 from sklearn.model_selection import train_test_split
 from data import read_data
+import pandas as pd
+from os.path import exists
 
 
-def create_feature_df(train=True, test_size=0.2):
-    data = read_data(tracking=False, train=train)
-    feature_df = get_play_metadata(data['pbp'])
-    feature_df = get_distance_from_hoop(feature_df, data['loc'])
-    feature_df = get_defenders_distance(feature_df, data['loc'])
-    #feature_df = get_distance_from_nearest_defender(feature_df, data['loc'])
-    #feature_df = get_defenders_within_n_distance(feature_df, data['loc'])
+def create_feature_df(train=True, test_size=0.2, cache_features=False, use_cache=False):
+    if use_cache and exists(FEATURE_CACHE_LOCATION):
+        feature_df = pd.read_csv(FEATURE_CACHE_LOCATION)
+    else:
+        data = read_data(tracking=False, train=train)
+        feature_df = get_play_metadata(data['pbp'])
+        feature_df = get_distance_from_hoop(feature_df, data['loc'])
+        feature_df = get_defenders_distance(feature_df, data['loc'])
+    if cache_features:
+            feature_df.to_csv(FEATURE_CACHE_LOCATION, index=False)
     if train:
         feature_df, test_df = train_test_split(feature_df, test_size=test_size, random_state=42)
     else:
@@ -76,8 +81,8 @@ def get_defenders_distance(feature_df, locations, n=7):
         defender_locations = locations.loc[(locations['play_iid'] == play_iid) & (locations['annotation_code'].isin(['d1', 'd2', 'd3', 'd4', 'd5']))]
         defender_locations.loc[:,'dist_from_defender'] = defender_locations.apply(dist_between_locations, axis=1, point=shooter_location)
         feature_df.loc[feature_df['play_iid'] == play_iid, 'dist_from_nearest_defender'] = defender_locations['dist_from_defender'].min()
-        feature_df.loc[feature_df['play_iid'] == play_iid, 'defenders_within_12_distance'] = len(defender_locations.loc[defender_locations['dist_from_defender'] <= 12])
-        feature_df.loc[feature_df['play_iid'] == play_iid, 'defenders_within_7_distance'] = len(defender_locations.loc[defender_locations['dist_from_defender'] <= n])
+        for dist in range(1, 15):
+            feature_df.loc[feature_df['play_iid'] == play_iid, f'defenders_within_{dist}_distance'] = len(defender_locations.loc[defender_locations['dist_from_defender'] <= dist])
     return feature_df
     
 def get_defenders_within_n_distance(feature_df, locations, n=7):
