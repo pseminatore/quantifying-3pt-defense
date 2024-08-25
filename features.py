@@ -14,6 +14,16 @@ def create_feature_df(train=True, test_size=0.2, cache_features=False, use_cache
         feature_df = get_play_metadata(data['pbp'])
         feature_df = get_distance_from_hoop(feature_df, data['loc'])
         feature_df = get_defenders_distance(feature_df, data['loc'])
+    ########################################################################
+    # Uncached Feature functions need to be added between these comments. 
+    # Move function into the `else` block above once it has been cached.
+    # Start new features
+    ########################################################################
+    
+    
+    ########################################################################
+    # End new features
+    ########################################################################
     if cache_features:
             feature_df.to_csv(FEATURE_CACHE_LOCATION, index=False)
     if train:
