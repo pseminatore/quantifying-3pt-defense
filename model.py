@@ -5,6 +5,7 @@ from constants import MODEL_OUTPUT_LOCATION, MODEL_SCORES_LOCATION
 from time import time
 import json
 from sklearn.model_selection import GridSearchCV
+from graphics import get_feature_importance
 
 
 def tune_hyperparams(feature_df, feature_cols, target_col):
@@ -46,25 +47,36 @@ def compare_features(static_df=None, test_cols=[], static_cols=['shot_distance',
     return best_feature, best_score
     
 
-def get_predictions(model_file='', rebuild_model=False, tune_model=False, feature_df=None, feature_cols=None, test_df=None, prod=False, get_score=False, save_model=True):
+def get_predictions(model_file='', rebuild_model=False, tune_model=False, feature_df=None, feature_cols=None, test_df=None, prod=False, get_score=False, save_model=True, show_feature_importance=False):
     model, model_file = get_model(model_file, rebuild_model, feature_df, feature_cols, prod, save_model=save_model)
     pred_df = predict(model, test_df, feature_cols)
     score = None
     if get_score:
-        score = score_predictions(pred_df, model_file, show_output=True)
+        score = score_predictions(pred_df, model, model_file, show_output=True, feature_cols=feature_cols, show_feature_importance=show_feature_importance)
     return pred_df, score
 
 
-def score_predictions(pred_df, model_file, show_output=False):
+def score_predictions(pred_df, model, model_file, show_output=False, feature_cols=[], save_model=True, show_feature_importance=False):
     score = roc_auc_score(pred_df['is_made'], pred_df['xMake'])
+    loss_score = log_loss(pred_df['is_made'], pred_df['xMake'])
+    cols = feature_cols + ['is_made', 'xMake']
+    inspect_df = pred_df[cols]
     if show_output:
         print(f'ROC-AUC Score: {score:.4f}')
+        print(f'Loss Score: {loss_score:.4f}')
         
-    with open(MODEL_SCORES_LOCATION, "r+") as scores_file:
-        scores_obj = json.load(scores_file)
-    scores_obj[model_file] = score
-    with open(MODEL_SCORES_LOCATION, "w+") as scores_file:
-        json.dump(scores_obj, scores_file, indent=4)
+    if show_feature_importance:
+        get_feature_importance(model)
+    if save_model:
+        with open(MODEL_SCORES_LOCATION, "r+") as scores_file:
+            scores_obj = json.load(scores_file)
+        model_metadata = {}
+        model_metadata['score'] = score
+        model_metadata['loss'] = loss_score
+        model_metadata['feature_cols'] = feature_cols
+        scores_obj[model_file] = model_metadata
+        with open(MODEL_SCORES_LOCATION, "w+") as scores_file:
+            json.dump(scores_obj, scores_file, indent=4)
     return score
 
 
@@ -73,10 +85,17 @@ def predict_static(test_df, static_guess=0.35):
     return test_df
 
 
-def predict(model, test_df, feature_cols):
+def predict(model, test_df, feature_cols, absolute=False, absolute_cutoff=0.35):
     X_test = test_df[feature_cols]
-    pred_prob = model.predict_proba(X_test)
-    preds = [pred[1] for pred in pred_prob]
+    if absolute:
+        if absolute_cutoff is None:
+            preds = model.predict(X_test)
+        else:
+            pred_prob = model.predict_proba(X_test) 
+            preds = [1 if pred[1] > absolute_cutoff else 0 for pred in pred_prob]
+    else:
+        pred_prob = model.predict_proba(X_test) 
+        preds = [pred[1] for pred in pred_prob]
     test_df['xMake'] = preds
     return test_df
 
@@ -90,7 +109,7 @@ def get_model(model_file, rebuild_model, df=None, feature_cols=None, prod=False,
         model.load_model(model_file)
     return model, model_file
 
-def build_model(df, feature_cols=[], prod=False, save_model=True):
+def build_model(df, feature_cols=[], prod=False, save_model=True,):
     X_train = df[feature_cols]
     y_train = df[['is_made']]
     xg_class = xgb.XGBClassifier(objective='binary:logistic', booster='gbtree', eval_metric=log_loss, learning_rate=0.2, gamma=0
@@ -99,15 +118,19 @@ def build_model(df, feature_cols=[], prod=False, save_model=True):
     xg_class.fit(X_train,y_train)
     
     if save_model:
-        model_file = save_model(xg_class, prod)
+        model_file = write_model(xg_class, prod)
     else: 
         model_file = None
     
     return xg_class, model_file
 
-def save_model(model, prod):
+def write_model(model, prod):
     iteration = f'{time():.0f}'
     is_prod = 1 if prod else 0
     model_filename = MODEL_OUTPUT_LOCATION.format(iteration=iteration, prod=is_prod)
     model.save_model(model_filename)
     return model_filename
+
+
+def get_confusion_matrix():
+    pass
