@@ -2,6 +2,7 @@ from matplotlib import animation
 from matplotlib import pyplot as plt
 from matplotlib.patches import Circle, Rectangle, Arc
 from data import read_tracking, read_locations, find_best_frame, get_play_df
+from features import get_shooter_velocity
 import pandas as pd
 import numpy as np
 
@@ -260,7 +261,45 @@ def create_ncaa_full_court(ax=None, three_line='mens', court_color='#dfbb85',
     return ax
 
 
+def show_frame(frame_num,df_offense,df_shooter,ax,teammates,shot):
+        closest_positions_offense = df_offense[df_offense['frame'] == frame_num]
+        closest_positions_shooter = df_shooter[df_shooter['frame'] == frame_num]
 
+                
+                # Plot positions of offensive players
+        ax.plot(closest_positions_offense['x_smooth'], closest_positions_offense['y_smooth'], 
+                        'o', markerfacecolor='#b94b75', markeredgecolor='black', markersize=10, linestyle='None', label='Offense')
+
+                # Plot position of the shooter
+        ax.plot(closest_positions_shooter['x_smooth'], closest_positions_shooter['y_smooth'], 
+                        'o', markerfacecolor='yellow', markeredgecolor='black', markersize=12, linestyle='None', label='Shooter')
+
+
+        for _, row in teammates.iterrows():
+                ax.plot(row['court_x'], row['court_y'], 
+                marker='o', color='blue', markersize=8, linestyle='None', label=f"Teammate {row['annotation_code']}")
+
+        if not shot.empty:
+                ax.plot(shot['court_x'].values[0], shot['court_y'].values[0], 
+                        marker='x', color='red', markersize=12, linestyle='None', label='Shot Location')
+                # Optionally add legends and other details
+
+        speed, angle,start_pos,end_pos = get_shooter_velocity(frame_num=frame_num, df_tracking=df_shooter,frames_bef=20,frames_aft=20)
+        
+        vx = end_pos[0] - start_pos[0]
+        vy = end_pos[1] - start_pos[1]
+
+# Normalize to match the speed
+        magnitude_velocity = np.sqrt(vx**2 + vy**2)
+        vx = (vx / magnitude_velocity) * speed
+        vy = (vy / magnitude_velocity) * speed
+
+# Plot the velocity vector at the shooter's end position
+        ax.quiver(end_pos[0], end_pos[1], vx, vy, angles='xy', scale_units='xy', scale=1, color='red', label=f"Velocity Vector\nSpeed: {speed:.2f}\nAngle: {angle:.2f}°")
+        ax.legend(loc='upper right')
+        plt.show()
+        return
+     
 
 def animate_play(game_id, play_id,example=False,smooth=True, shot_loc=True,show_closest_frame=False):
     if example == False:
@@ -276,7 +315,7 @@ def animate_play(game_id, play_id,example=False,smooth=True, shot_loc=True,show_
 
     
     if smooth == True:
-        window = 7
+        window = 9
     else: 
         window = 1
 
@@ -288,6 +327,28 @@ def animate_play(game_id, play_id,example=False,smooth=True, shot_loc=True,show_
 
     df_shooter['x_smooth'] = df_shooter['x'].rolling(window=window).mean()
     df_shooter['y_smooth'] = df_shooter['y'].rolling(window=window).mean()
+
+
+        #- 1 - 0.05 * df_offense['x_smooth']
+        #+ (((.002)*df_offense['x_smooth']) -1)
+        #- .04*(47-df_offense['x_smooth'])
+    camera_y = 65
+    camera_x = 47
+    k_midcourt = 2  
+    k_basket = 0.3    # Higher correction near the basket (further from camera)
+
+# Define scaling factor based on distance from midcourt (closer to basket = higher correction)
+    o_scaling_factor_x = 1 - (df_offense['x_smooth'] / 47)
+    d_scaling_factor_x = 1 - (df_defense['x_smooth'] / 47)
+# Apply a scaled correction factor based on the player's x-position
+    df_offense['x_smooth'] = df_offense['x_smooth'] - (k_midcourt + o_scaling_factor_x * (k_basket - k_midcourt)) * np.arctan2(camera_y - df_offense['y_smooth'], df_offense['x_smooth'] - camera_x)
+    df_offense['y_smooth'] = df_offense['y_smooth'] - 2 + (df_offense['y_smooth']-25)/20
+
+    df_defense['x_smooth'] = df_defense['x_smooth'] - (k_midcourt + d_scaling_factor_x * (k_basket - k_midcourt)) * np.arctan2(camera_y - df_defense['y_smooth'], df_defense['x_smooth'] - camera_x)
+    df_defense['y_smooth'] = df_defense['y_smooth'] - 2 + (df_defense['y_smooth']-25)/20
+
+    df_shooter['x_smooth'] = df_shooter['x_smooth'] 
+    df_shooter['y_smooth'] = df_shooter['y_smooth'] 
 
 # Drop the NaN values that result from the rolling operation
     df_offense.dropna(inplace=True)
@@ -324,29 +385,8 @@ def animate_play(game_id, play_id,example=False,smooth=True, shot_loc=True,show_
 
         if show_closest_frame:
     # Find the positions for the closest frame
-                closest_positions_offense = df_offense[df_offense['frame'] == best_frame]
-                closest_positions_shooter = df_shooter[df_shooter['frame'] == best_frame]
-
-                
-                # Plot positions of offensive players
-                ax.plot(closest_positions_offense['x_smooth'], closest_positions_offense['y_smooth'], 
-                        'o', markerfacecolor='#b94b75', markeredgecolor='black', markersize=10, linestyle='None', label='Offense')
-
-                # Plot position of the shooter
-                ax.plot(closest_positions_shooter['x_smooth'], closest_positions_shooter['y_smooth'], 
-                        'o', markerfacecolor='yellow', markeredgecolor='black', markersize=12, linestyle='None', label='Shooter')
-
-
-                for _, row in teammates.iterrows():
-                        ax.plot(row['court_x'], row['court_y'], 
-                        marker='o', color='blue', markersize=8, linestyle='None', label=f"Teammate {row['annotation_code']}")
-
-                if not shot.empty:
-                        ax.plot(shot['court_x'].values[0], shot['court_y'].values[0], 
-                        marker='x', color='red', markersize=12, linestyle='None', label='Shot Location')
-                # Optionally add legends and other details
-                ax.legend(loc='upper right')
-                plt.show()
+    #best_frame
+                show_frame(best_frame,df_offense,df_shooter,ax,teammates,shot)
                 return
 
         
@@ -380,7 +420,7 @@ def animate_play(game_id, play_id,example=False,smooth=True, shot_loc=True,show_
     plt.show()
 
 
-animate_play(19783001319551,6,example = True, smooth = True,show_closest_frame=True)
+animate_play(19783001319551,6,example = True, smooth = True,show_closest_frame=False)
 
 
 
@@ -404,4 +444,6 @@ game_id,play_id,annotation_code,court_x,court_y
 ''' sample play data for reference: tracking
 game_id,play_id,type,frame,x,y,tracklet_id
 '''
-#72319
+#72324
+#72316
+#72322

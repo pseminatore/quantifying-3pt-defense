@@ -2,6 +2,7 @@ from constants import HOOP_LOCATIONS, MIDPOINT
 from math import sqrt
 from sklearn.model_selection import train_test_split
 from data import read_data
+import numpy as np
 
 
 def create_feature_df(train=True, test_size=0.2):
@@ -42,6 +43,46 @@ def dist_from_hoop(row, side='L'):
     return sqrt(((row['court_x_norm'] - HOOP_LOCATIONS[side]['x']) ** 2) + ((row['court_y_norm'] - HOOP_LOCATIONS[side]['y']) ** 2))
     
     
+def get_shooter_velocity(frame_num, df_tracking, frames_bef, frames_aft):
+    basket_x, basket_y = 4, 25
+
+    frames = range(frame_num - frames_bef, frame_num + frames_aft + 1)
+    df_frames = df_tracking[df_tracking['frame'].isin(frames)]
+    
+    if df_frames.empty or len(df_frames) < 2:
+        return np.nan, np.nan
+    
+      # Calculate distances between consecutive frames to compute speed
+    df_frames['dx'] = df_frames['x_smooth'].diff()
+    df_frames['dy'] = df_frames['y_smooth'].diff()
+    
+    df_frames['time_diff'] = df_frames['frame'].diff() / 30  # time difference in seconds
+    df_frames['vx'] = df_frames['dx'] / df_frames['time_diff']
+    df_frames['vy'] = df_frames['dy'] / df_frames['time_diff']
+    
+    avg_vx = df_frames['vx'].mean()
+    avg_vy = df_frames['vy'].mean()
+
+    
+    # Calculate the angle of the velocity vector relative to the basket position
+    direction_to_basket_x = basket_x - df_frames.iloc[-1]['x_smooth']
+    direction_to_basket_y = basket_y - df_frames.iloc[-1]['y_smooth']
+    
+    # Angle between velocity vector and direction to basket
+    dot_product = avg_vx * direction_to_basket_x + avg_vy * direction_to_basket_y
+    magnitude_velocity = np.sqrt(avg_vx**2 + avg_vy**2)
+    magnitude_basket_direction = np.sqrt(direction_to_basket_x**2 + direction_to_basket_y**2)
+    
+    # Compute the angle in radians and convert to degrees
+    cos_theta = dot_product / (magnitude_velocity * magnitude_basket_direction)
+
+    speed = np.sqrt(avg_vx**2 + avg_vy**2)
+    angle = np.arccos(np.clip(cos_theta, -1.0, 1.0)) * 180 / np.pi
+    start_pos = df_frames['x_smooth'].iloc[0], df_frames['y_smooth'].iloc[0]
+    end_pos = df_frames['x_smooth'].iloc[-1],df_frames['y_smooth'].iloc[-1]
+    return speed, angle,start_pos,end_pos
+
+
 
 """
 All functions below this comment must take at least the feature DF as a param
@@ -60,4 +101,5 @@ def get_distance_from_hoop(feature_df, locations):
     return feature_df
     
     
+
     

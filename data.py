@@ -84,11 +84,11 @@ def process_all_games_and_plays():
         teammates = df_play_loc[df_play_loc['annotation_code'].isin(['t1', 't2', 't3', 't4'])]
 
         # Find the best frame
-        best_frame, _ = find_best_frame(df_offense, df_shooter, teammates, shooter)
+        best_frame, min_distance = find_best_frame(df_offense, df_shooter, teammates, shooter)
         print(best_frame)
 
         # Store the result
-        results.append({'game_id': game_id, 'play_id': play_id, 'frame': best_frame})
+        results.append({'game_id': game_id, 'play_id': play_id, 'frame': best_frame, 'min_distance': min_distance})
 
     # Convert the results to a DataFrame and save as a CSV
     df_results = pd.DataFrame(results)
@@ -105,8 +105,7 @@ def get_play_df(game_id,play_id):
     return df_offense, df_defense, df_shooter
 
 
-def calculate_distance(x1, y1, x2, y2):
-    return np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+
 
 def find_best_frame(df_offense, df_shooter, teammates, shooter):
     """
@@ -136,8 +135,8 @@ def find_best_frame(df_offense, df_shooter, teammates, shooter):
     # Vectorized distance calculations for each teammate
     distances = []
     for _, teammate in teammates.iterrows():
-        distances.append(np.sqrt((df_offense['x'] - teammate['court_x']) ** 2 + 
-                                 (df_offense['y'] - teammate['court_y']) ** 2))
+        distances.append(np.sqrt((df_offense['x_smooth'] - teammate['court_x']) ** 2 + 
+                                 (df_offense['y_smooth'] - teammate['court_y']) ** 2))
 
     if distances:
         df_offense.loc[:, 'min_distance'] = np.min(distances, axis=0)  # Use loc to avoid SettingWithCopyWarning
@@ -166,4 +165,4 @@ def find_best_frame(df_offense, df_shooter, teammates, shooter):
     
 
 
-process_all_games_and_plays()
+#process_all_games_and_plays()
