@@ -47,16 +47,16 @@ def compare_features(static_df=None, test_cols=[], static_cols=['shot_distance',
     return best_feature, best_score
     
 
-def get_predictions(model_file='', rebuild_model=False, tune_model=False, feature_df=None, feature_cols=None, test_df=None, prod=False, get_score=False, save_model=True, show_feature_importance=False):
+def get_predictions(model_file='', rebuild_model=False, tune_model=False, feature_df=None, feature_cols=None, test_df=None, prod=False, get_score=False, save_model=True, show_feature_importance=False, model_comments=None):
     model, model_file = get_model(model_file, rebuild_model, feature_df, feature_cols, prod, save_model=save_model)
     pred_df = predict(model, test_df, feature_cols)
     score = None
     if get_score:
-        score = score_predictions(pred_df, model, model_file, show_output=True, feature_cols=feature_cols, show_feature_importance=show_feature_importance)
+        score = score_predictions(pred_df, model, model_file, show_output=True, feature_cols=feature_cols, show_feature_importance=show_feature_importance, model_comments=model_comments)
     return pred_df, score
 
 
-def score_predictions(pred_df, model, model_file, show_output=False, feature_cols=[], save_model=True, show_feature_importance=False):
+def score_predictions(pred_df, model, model_file, show_output=False, feature_cols=[], save_model=True, show_feature_importance=False, model_comments=None):
     score = roc_auc_score(pred_df['is_made'], pred_df['xMake'])
     loss_score = log_loss(pred_df['is_made'], pred_df['xMake'])
     cols = feature_cols + ['is_made', 'xMake']
@@ -74,6 +74,8 @@ def score_predictions(pred_df, model, model_file, show_output=False, feature_col
         model_metadata['score'] = score
         model_metadata['loss'] = loss_score
         model_metadata['feature_cols'] = feature_cols
+        if model_comments is not None:
+            model_metadata['comments'] = model_comments
         scores_obj[model_file] = model_metadata
         with open(MODEL_SCORES_LOCATION, "w+") as scores_file:
             json.dump(scores_obj, scores_file, indent=4)
