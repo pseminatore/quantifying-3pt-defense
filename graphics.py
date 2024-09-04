@@ -5,7 +5,13 @@ from data import read_tracking, read_locations, find_best_frame, get_play_df
 from features import get_shooter_velocity
 import pandas as pd
 import numpy as np
+import xgboost as xgb
 
+
+def get_feature_importance(model):
+    xgb.plot_importance(model)
+    plt.rcParams['figure.figsize'] = [5, 5]
+    plt.show() 
 
 
 
@@ -420,7 +426,8 @@ def animate_play(game_id, play_id,example=False,smooth=True, shot_loc=True,show_
     plt.show()
 
 
-animate_play(19783001319551,6,example = True, smooth = True,show_closest_frame=False)
+if __name__ == '__main__':
+        animate_play(19783001319551,6,example = True, smooth = True,show_closest_frame=True)
 
 
 
