@@ -19,7 +19,7 @@ def compare_dist_columns():
 
 def test_model():
     feature_df, test_df = create_feature_df(use_cache=True)
-    pred_df, score = get_predictions(rebuild_model=True, feature_df=feature_df, feature_cols=['shot_distance', 'dist_from_nearest_defender', 'defenders_within_9_distance'], test_df=test_df, get_score=True, show_feature_importance=False)
+    pred_df, score = get_predictions(rebuild_model=True, feature_df=feature_df, feature_cols=['shot_distance', 'obfuscation_score'], test_df=test_df, get_score=True, show_feature_importance=False, tune_model=True)
     
 
 def run():

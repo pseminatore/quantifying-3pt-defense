@@ -11,25 +11,27 @@ from graphics import get_feature_importance
 def tune_hyperparams(feature_df, feature_cols, target_col):
     X = feature_df[feature_cols]
     y = feature_df[[target_col]]
-    estimator = xgb.XGBClassifier(objective='binary:logistic', booster='gbtree', eval_metric=log_loss)
+    estimator = xgb.XGBClassifier(objective='binary:logistic', booster='gbtree', eval_metric=roc_auc_score)
     parameters = {
         'max_depth': range (3, 10, 1),
         'n_estimators': range(60, 220, 40),
-        'eta': [0.025, 0.05, 0.1, 0.2],
-        'subsample': [0.7, 0.9, 1],
-        'colsample_bytree': [0.8, 1],
-        #'gamma': [0, 1, 2, 3]
+        'learning_rate': [0.025, 0.05, 0.1, 0.2],
+        #'subsample': [0.7, 0.9, 1],
+        #'colsample_bytree': [0.8, 1],
+        'gamma': [0, 1, 2, 3],
+        'base_score': [0.35, 0.5]
     }
     grid_search = GridSearchCV(
         estimator=estimator,
         param_grid=parameters,
         scoring = 'accuracy',
         n_jobs = 10,
-        cv = 10,
+        cv = 2,
         verbose=True
     )
     grid_search.fit(X, y)
-    print('best estimator: %s' % grid_search.best_estimator_)
+    print('best estimator: %s' % grid_search.best_params_)
+    return grid_search.best_params_
 
 
 def compare_features(static_df=None, test_cols=[], static_cols=['shot_distance', 'dist_from_nearest_defender'], test_df=None, print_results=True):
@@ -48,7 +50,7 @@ def compare_features(static_df=None, test_cols=[], static_cols=['shot_distance',
     
 
 def get_predictions(model_file='', rebuild_model=False, tune_model=False, feature_df=None, feature_cols=None, test_df=None, prod=False, get_score=False, save_model=True, show_feature_importance=False, model_comments=None):
-    model, model_file = get_model(model_file, rebuild_model, feature_df, feature_cols, prod, save_model=save_model)
+    model, model_file = get_model(model_file, rebuild_model, feature_df, feature_cols, prod, save_model=save_model, tune_model=tune_model)
     pred_df = predict(model, test_df, feature_cols)
     score = None
     if get_score:
@@ -101,22 +103,27 @@ def predict(model, test_df, feature_cols, absolute=False, absolute_cutoff=0.35):
     test_df['xMake'] = preds
     return test_df
 
-def get_model(model_file, rebuild_model, df=None, feature_cols=None, prod=False, save_model=True):
+def get_model(model_file, rebuild_model, df=None, feature_cols=None, prod=False, save_model=True, tune_model=False):
     if not exists(model_file) or rebuild_model:
         if df is None:
             raise Exception('Missing Required params')
-        model, model_file = build_model(df, feature_cols, prod, save_model)
+        model, model_file = build_model(df, feature_cols, prod, save_model, tune_model)
     else:
         model = xgb.XGBClassifier()
         model.load_model(model_file)
     return model, model_file
 
-def build_model(df, feature_cols=[], prod=False, save_model=True,):
+def build_model(df, feature_cols=[], prod=False, save_model=True, tune_model=False):
     X_train = df[feature_cols]
     y_train = df[['is_made']]
-    xg_class = xgb.XGBClassifier(objective='binary:logistic', booster='gbtree', eval_metric=log_loss, learning_rate=0.2, gamma=0
-                                , subsample=0.8, colsample_bytree=0.8, colsample_bynode=1, max_depth=4, min_child_weight=1)
-
+    if not tune_model:
+        xg_class = xgb.XGBClassifier(objective='binary:logistic', booster='gbtree', eval_metric=log_loss, learning_rate=0.2, gamma=0
+                                    ,  colsample_bynode=1, max_depth=4, min_child_weight=1)
+    else:
+        best_params = tune_hyperparams(df, feature_cols, 'is_made')
+        xg_class = xgb.XGBClassifier(objective='binary:logistic', booster='gbtree', eval_metric=log_loss
+                                    , subsample=0.7, colsample_bytree=1.0, colsample_bynode=1, min_child_weight=1, **best_params)
+    
     xg_class.fit(X_train,y_train)
     
     if save_model:
