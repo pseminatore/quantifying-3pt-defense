@@ -23,7 +23,8 @@ def create_feature_df(train=True, test_size=0.2, cache_features=False, use_cache
     # Move function into the `else` block above once it has been cached.
     # Start new features
     ########################################################################
-    
+    data = read_data(train=train)
+    feature_df = get_distance_traveled(feature_df, data['tracking'])
     
     ########################################################################
     # End new features
@@ -158,10 +159,38 @@ def get_distance_from_nearest_defender(feature_df, locations):
         defender_locations.loc[:,'dist_from_defender'] = defender_locations.apply(dist_between_locations, axis=1, point=shooter_location)
         feature_df.loc[feature_df['play_iid'] == play_iid, 'dist_from_nearest_defender'] = defender_locations['dist_from_defender'].min()
     return feature_df
+
+def get_distance_traveled(feature_df, tracking):
+    tracking_df = tracking.copy()
+    # Isolate shooter frames only
+    tracking_df = tracking_df.loc[tracking_df['type'] == 'shooter']
+    
+    # Lag by a frame to get next frame on each row
+    tracking_df['x_last'] = tracking_df['x'].shift(1)
+    tracking_df['y_last'] = tracking_df['y'].shift(1)
+    
+    # Get euclidean distance between points
+    tracking_df['delta'] = np.linalg.norm(tracking_df[['x', 'y']].values - tracking_df[['x_last', 'y_last']].values, axis=1)
+    
+    # Only want magnitude
+    tracking_df['distance_traveled'] = tracking_df['delta'].abs()
+    
+    # Reduce to only necessary columns
+    tracking_df = tracking_df[['play_iid', 'distance_traveled']]
+    
+    # Sum across frames on play to get total distance covered
+    play_df = tracking_df.groupby(by='play_iid').sum()
+    play_df.reset_index(inplace=True)
+    
+    # Join to feature DF and return
+    feature_df = feature_df.merge(right=play_df, how='left', left_on=['play_iid'], right_on=['play_iid'])
+    
+    return feature_df
+    
     
 def get_obfuscation_score(feature_df, locations, dist_padding=3):
     locations_df = locations.copy()
-    # locations_df = get_court_locations_df(26, 45)
+    # locations_df = get_court_locations_df(24, 0)
     # locations_df = locations_df.loc[locations_df['play_iid'] == '19783001319551-6']
     
     # Only get necessary columns to keep pivoting straightforward
@@ -227,7 +256,7 @@ def get_obfuscation_score(feature_df, locations, dist_padding=3):
     full_df['obfuscation_score'] = (full_df['sq_def_dist_ratio'] * (1.2 * np.cos(np.deg2rad(full_df['def_offset_angle']))))# * 180 / np.pi
     
     # See what happens
-    # plot_obfuscation_scores(full_df)
+    plot_obfuscation_scores(full_df)
     
     # Reduce to only necessary columns
     full_df = full_df[['play_iid', 'obfuscation_score']]

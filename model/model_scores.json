@@ -11,5 +11,14 @@
             "shot_distance",
             "obfuscation_score"
         ]
+    },
+    "model/1726113339_0.txt": {
+        "score": 0.5119416001246487,
+        "loss": 0.6396703835187899,
+        "feature_cols": [
+            "shot_distance",
+            "obfuscation_score",
+            "distance_traveled"
+        ]
     }
 }
