@@ -121,7 +121,7 @@ def build_model(df, feature_cols=[], prod=False, save_model=True, tune_model=Fal
                                     ,  colsample_bynode=1, max_depth=4, min_child_weight=1)
     else:
         best_params = tune_hyperparams(df, feature_cols, 'is_made')
-        xg_class = xgb.XGBClassifier(objective='binary:logistic', booster='gbtree', eval_metric=log_loss
+        xg_class = xgb.XGBClassifier(objective='binary:logistic', booster='gbtree', eval_metric=log_loss, base_score=0.3
                                     , subsample=0.7, colsample_bytree=1.0, colsample_bynode=1, min_child_weight=1, **best_params)
     
     xg_class.fit(X_train,y_train)
