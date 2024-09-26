@@ -1,24 +1,25 @@
 import xgboost as xgb
-from sklearn.metrics import log_loss, roc_auc_score
+from sklearn.metrics import log_loss, roc_auc_score, confusion_matrix
 from os.path import exists
 from constants import MODEL_OUTPUT_LOCATION, MODEL_SCORES_LOCATION
 from time import time
 import json
 from sklearn.model_selection import GridSearchCV
 from graphics import get_feature_importance
-
+import numpy as np
+from random import randint
 
 def tune_hyperparams(feature_df, feature_cols, target_col):
     X = feature_df[feature_cols]
     y = feature_df[[target_col]]
     estimator = xgb.XGBClassifier(objective='binary:logistic', booster='gbtree', eval_metric=roc_auc_score)
     parameters = {
-        'max_depth': range (3, 10, 1),
-        'n_estimators': range(60, 220, 40),
-        'learning_rate': [0.025, 0.05, 0.1, 0.2],
+        #'max_depth': range (3, 10, 1),
+        #'n_estimators': range(60, 220, 40),
+        #'learning_rate': [0.025, 0.05, 0.1, 0.2],
         #'subsample': [0.7, 0.9, 1],
         #'colsample_bytree': [0.8, 1],
-        'gamma': [0, 1, 2, 3],
+        #'gamma': [0, 1, 2, 3],
         'base_score': [0.35, 0.5]
     }
     grid_search = GridSearchCV(
@@ -58,7 +59,7 @@ def get_predictions(model_file='', rebuild_model=False, tune_model=False, featur
     return pred_df, score
 
 
-def score_predictions(pred_df, model, model_file, show_output=False, feature_cols=[], save_model=True, show_feature_importance=False, model_comments=None):
+def score_predictions(pred_df, model, model_file, show_output=False, feature_cols=[], save_model=True, show_feature_importance=False, model_comments=None, show_confusion_matrix=True):
     score = roc_auc_score(pred_df['is_made'], pred_df['xMake'])
     loss_score = log_loss(pred_df['is_made'], pred_df['xMake'])
     cols = feature_cols + ['is_made', 'xMake']
@@ -66,6 +67,9 @@ def score_predictions(pred_df, model, model_file, show_output=False, feature_col
     if show_output:
         print(f'ROC-AUC Score: {score:.4f}')
         print(f'Loss Score: {loss_score:.4f}')
+    y_pred = pred_df.apply(lambda row: 1 if row['xMake'] > 0.39 else 0, axis=1)
+    if show_confusion_matrix:
+        plot_confusion_matrix(cm=confusion_matrix(pred_df['is_made'], y_pred), target_names=['Miss', 'Make'], normalize=False)
         
     if show_feature_importance:
         get_feature_importance(model)
@@ -121,10 +125,11 @@ def build_model(df, feature_cols=[], prod=False, save_model=True, tune_model=Fal
                                     ,  colsample_bynode=1, max_depth=4, min_child_weight=1)
     else:
         best_params = tune_hyperparams(df, feature_cols, 'is_made')
-        xg_class = xgb.XGBClassifier(objective='binary:logistic', booster='gbtree', eval_metric=log_loss, base_score=0.3
-                                    , subsample=0.7, colsample_bytree=1.0, colsample_bynode=1, min_child_weight=1, **best_params)
+        xg_class = xgb.XGBClassifier(objective=custom_weighted_log_loss, booster='gbtree', subsample=0.7, colsample_bytree=1.0
+                                    , colsample_bynode=1, min_child_weight=1, random_state = 42
+                                    ,**best_params)
     
-    xg_class.fit(X_train,y_train)
+    xg_class.fit(X_train,y_train, eval_metric=pct_correct_ranks, eval_set=[(X_train, y_train)])
     
     if save_model:
         model_file = write_model(xg_class, prod)
@@ -141,5 +146,124 @@ def write_model(model, prod):
     return model_filename
 
 
-def get_confusion_matrix():
-    pass
+def softmax(x):
+    '''Softmax function with x as input vector.'''
+    e = np.exp(x)
+    return e / np.sum(e)
+
+def pct_correct_ranks(y_pred: np.ndarray, y_true: xgb.DMatrix):
+    corrects = 0
+    y_vals = y_true.get_label()
+    makes = np.nonzero(y_vals)[0]
+    misses = np.where(y_vals == 0)[0]
+    makes_range = len(makes)-1
+    misses_range = len(misses)-1
+    for idx, val in enumerate(y_pred):
+        if y_vals[idx] == 1:
+            comp_idx = misses[randint(0, misses_range)]
+            comp_val = y_pred[comp_idx]
+            if comp_val < val:
+                corrects +=1
+        else:
+            comp_idx = makes[randint(0, makes_range)]
+            comp_val = y_pred[comp_idx]
+            if comp_val > val:
+                corrects +=1
+    result = corrects / len(y_pred) 
+    return 'pctCorrectRanks', result
+
+def custom_weighted_log_loss(y_true: np.ndarray, y_pred: np.ndarray):
+    pred_prob = 1.0/ (1.0 + np.exp(-y_pred))
+    alpha = 10.0
+    grad = (pred_prob - y_true) * (y_true * alpha + (1-y_true))
+    hess = pred_prob * (1 - pred_prob) * (y_true * alpha + (1 - y_true))
+    return grad, hess
+    
+
+def rank_loss(y_true: np.ndarray, y_pred: np.ndarray):
+    corrects = np.array([])
+    preds = 1.0/ (1.0 + np.exp(-y_pred))
+    y_vals = y_true
+    makes = np.nonzero(y_vals)[0]
+    misses = np.where(y_vals == 0)[0]
+    makes_range = len(makes)-1
+    misses_range = len(misses)-1
+    for idx, val in enumerate(preds):
+        if y_vals[idx] == 1:
+            comp_idx = misses[randint(0, misses_range)]
+            comp_val = preds[comp_idx]
+            corrects = np.append(corrects, 0-val if val > comp_val else -1 + val)
+        else:
+            comp_idx = makes[randint(0, makes_range)]
+            comp_val = preds[comp_idx]
+            corrects = np.append(corrects, val if val < comp_val else 1 - val)
+    grad = corrects * (y_true + (1 - y_true))
+    hess = corrects * (1 - corrects) * (y_true + (1 - y_true))
+    return grad, hess
+
+def manual_rank(y_true: np.ndarray, y_pred: np.ndarray):
+    corrects = np.array([])
+    y_pred = softmax(y_pred)
+    y_vals = y_true
+    makes = np.nonzero(y_vals)[0]
+    misses = np.where(y_vals == 0)[0]
+    makes_range = len(makes)-1
+    misses_range = len(misses)-1
+    for idx, val in enumerate(y_pred):
+        if y_vals[idx] == 1:
+            comp_idx = misses[randint(0, misses_range)]
+            comp_val = y_pred[comp_idx]
+            corrects = np.append(corrects, 1 if comp_val > val else 0)
+        else:
+            comp_idx = makes[randint(0, makes_range)]
+            comp_val = y_pred[comp_idx]
+            corrects = np.append(corrects, 1 if comp_val < val else 0)
+    grad = np.where(corrects < 1, -corrects / len(corrects), 0)      
+    hess = np.repeat(1e-6, len(corrects))
+    return grad, hess
+    
+
+def plot_confusion_matrix(cm,
+                          target_names,
+                          title='Confusion matrix',
+                          cmap=None,
+                          normalize=True):
+    import matplotlib.pyplot as plt
+    import itertools
+
+    accuracy = np.trace(cm) / float(np.sum(cm))
+    misclass = 1 - accuracy
+
+    if cmap is None:
+        cmap = plt.get_cmap('Blues')
+
+    plt.figure(figsize=(8, 6))
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+
+    if target_names is not None:
+        tick_marks = np.arange(len(target_names))
+        plt.xticks(tick_marks, target_names, rotation=45)
+        plt.yticks(tick_marks, target_names)
+
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+
+
+    thresh = cm.max() / 1.5 if normalize else cm.max() / 2
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        if normalize:
+            plt.text(j, i, "{:0.4f}".format(cm[i, j]),
+                     horizontalalignment="center",
+                     color="white" if cm[i, j] > thresh else "black")
+        else:
+            plt.text(j, i, "{:,}".format(cm[i, j]),
+                     horizontalalignment="center",
+                     color="white" if cm[i, j] > thresh else "black")
+
+
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label\naccuracy={:0.4f}; misclass={:0.4f}'.format(accuracy, misclass))
+    plt.show()

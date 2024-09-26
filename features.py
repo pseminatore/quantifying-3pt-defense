@@ -18,13 +18,14 @@ def create_feature_df(train=True, test_size=0.2, cache_features=False, use_cache
         feature_df = get_distance_from_hoop(feature_df, data['loc'])
         #feature_df = get_defenders_distance(feature_df, data['loc'])
         feature_df = get_obfuscation_score(feature_df, data['loc'])
+        feature_df = get_distance_traveled(feature_df, data['tracking'])
     ########################################################################
     # Uncached Feature functions need to be added between these comments. 
     # Move function into the `else` block above once it has been cached.
     # Start new features
     ########################################################################
-    data = read_data(train=train)
-    feature_df = get_distance_traveled(feature_df, data['tracking'])
+    #data = read_data(train=train)
+    
     
     ########################################################################
     # End new features
