@@ -21,8 +21,8 @@ def run():
 
     binned_trav= pd.cut(features_df['distance_traveled'],[0,50,100,150,200,250,300,10000],labels = [1,2,3,4,5,6,7])
     #print(binned_distance)
-    features_df['distance_traveled'] = binned_trav
-    trav_shooting_perc  = features_df[['is_made','distance_traveled']].groupby(by='distance_traveled').mean()
+    features_df['binned_trav'] = binned_trav
+    trav_shooting_perc  = features_df[['is_made','binned_trav']].groupby(by='binned_trav').mean()
     print(trav_shooting_perc)
 
     features_df.to_csv('processed_features.csv',index=False)

@@ -31,4 +31,4 @@ MODEL_OUTPUT_LOCATION = 'model/{iteration}_{prod}.txt'
 
 MODEL_SCORES_LOCATION = 'model/model_scores.json' 
 
-FEATURE_CACHE_LOCATION = 'data/processed_features.csv'
+FEATURE_CACHE_LOCATION = 'processed_features.csv'
