@@ -18,7 +18,7 @@ def create_feature_df(train=True, test_size=0.2, cache_features=True, use_cache=
         feature_df = get_distance_from_hoop(feature_df, data['loc'])
         #feature_df = get_defenders_distance(feature_df, data['loc'])
         feature_df = get_obfuscation_score(feature_df, data['loc'])
-        feature_df = get_time_5_feet(feature_df,data['tracking'],data['loc'])
+        
     ########################################################################
     # Uncached Feature functions need to be added between these comments. 
     # Move function into the `else` block above once it has been cached.
@@ -26,7 +26,7 @@ def create_feature_df(train=True, test_size=0.2, cache_features=True, use_cache=
     ########################################################################
     data = read_data(train=train)
     feature_df = get_distance_traveled(feature_df, data['tracking'])
-    
+    feature_df = get_time_5_feet(feature_df,data['tracking'],data['loc'])
     
     ########################################################################
     # End new features
@@ -293,7 +293,7 @@ def get_time_5_feet(feature_df, tracking, locations):
     )
     
     # Determine if the player is within 5 feet
-    tracking_df['within_5_feet'] = tracking_df['distance_to_shot'] <= 5
+    tracking_df['within_5_feet'] = tracking_df['distance_to_shot'] <= 3
     
     # Sum the number of frames where the player is within 5 feet for each play
     play_df = tracking_df.groupby('play_iid')['within_5_feet'].sum().reset_index()
