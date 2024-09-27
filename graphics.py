@@ -5,7 +5,7 @@ from data import read_tracking, read_locations, find_best_frame, get_play_df
 import pandas as pd
 import numpy as np
 import xgboost as xgb
-
+#from features import get_shooter_velocity
 
 def get_feature_importance(model):
 	xgb.plot_importance(model)

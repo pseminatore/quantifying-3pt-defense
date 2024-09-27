@@ -9,15 +9,16 @@ import numpy as np
 
 
 
-def create_feature_df(train=True, test_size=0.2, cache_features=False, use_cache=False):
+def create_feature_df(train=True, test_size=0.2, cache_features=True, use_cache=True):
     if use_cache and exists(FEATURE_CACHE_LOCATION):
         feature_df = pd.read_csv(FEATURE_CACHE_LOCATION)
     else:
-        data = read_data(tracking=False, train=train)
+        data = read_data(tracking=True, train=train)
         feature_df = get_play_metadata(data['pbp'])
         feature_df = get_distance_from_hoop(feature_df, data['loc'])
         #feature_df = get_defenders_distance(feature_df, data['loc'])
         feature_df = get_obfuscation_score(feature_df, data['loc'])
+        feature_df = get_time_5_feet(feature_df,data['tracking'],data['loc'])
     ########################################################################
     # Uncached Feature functions need to be added between these comments. 
     # Move function into the `else` block above once it has been cached.
@@ -25,6 +26,7 @@ def create_feature_df(train=True, test_size=0.2, cache_features=False, use_cache
     ########################################################################
     data = read_data(train=train)
     feature_df = get_distance_traveled(feature_df, data['tracking'])
+    
     
     ########################################################################
     # End new features
@@ -272,8 +274,37 @@ def get_obfuscation_score(feature_df, locations, dist_padding=3):
     
     
     
+def get_time_5_feet(feature_df, tracking, locations):
     
     
+    # Extract the best frame for the given game_id and play_id
+    tracking_df = tracking.copy()
+    
+    # Isolate shooter frames only
+    tracking_df = tracking_df.loc[tracking_df['type'] == 'shooter']
+    
+    # Merge the tracking data with the location data to get the shooting position
+    tracking_df = tracking_df.merge(locations[['play_iid', 'court_x', 'court_y']], how='left', on='play_iid')
+    
+    # Calculate Euclidean distance between player's position and the shooting position
+    tracking_df['distance_to_shot'] = np.sqrt(
+        (tracking_df['x'] - tracking_df['court_x']) ** 2 +
+        (tracking_df['y'] - tracking_df['court_y']) ** 2
+    )
+    
+    # Determine if the player is within 5 feet
+    tracking_df['within_5_feet'] = tracking_df['distance_to_shot'] <= 5
+    
+    # Sum the number of frames where the player is within 5 feet for each play
+    play_df = tracking_df.groupby('play_iid')['within_5_feet'].sum().reset_index()
+    
+    # Rename the column to indicate that this is the number of frames within 5 feet
+    play_df.rename(columns={'within_5_feet': 'time_within_5_feet'}, inplace=True)
+    
+    # Join the result to the feature DataFrame
+    feature_df = feature_df.merge(right=play_df, how='left', on='play_iid')
+    
+    return feature_df
     
 
     
