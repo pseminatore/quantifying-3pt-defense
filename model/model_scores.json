@@ -20,5 +20,63 @@
             "obfuscation_score",
             "distance_traveled"
         ]
+    },
+    "model/1727399633_0.txt": {
+        "score": 0.5111453996583416,
+        "loss": 0.6398064882012483,
+        "feature_cols": [
+            "shot_distance",
+            "obfuscation_score",
+            "distance_traveled",
+            "binned_distance",
+            "binned_obf",
+            "binned_trav"
+        ]
+    },
+    "model/1727400597_0.txt": {
+        "score": 0.5112284049858065,
+        "loss": 0.6404638014273177,
+        "feature_cols": [
+            "shot_distance",
+            "obfuscation_score",
+            "distance_traveled",
+            "binned_distance",
+            "binned_obf",
+            "binned_trav"
+        ]
+    },
+    "model/1727402817_0.txt": {
+        "score": 0.5071532302965225,
+        "loss": 0.6529415597691124,
+        "feature_cols": [
+            "shot_distance",
+            "obfuscation_score",
+            "distance_traveled",
+            "binned_distance",
+            "binned_obf",
+            "binned_trav"
+        ]
+    },
+    "model/1727640637_0.txt": {
+        "score": 0.5200304868719688,
+        "loss": 0.6971468378560974,
+        "feature_cols": [
+            "shot_distance",
+            "obfuscation_score",
+            "distance_traveled",
+            "shot_angle",
+            "time_within_3_feet"
+        ]
+    },
+    "model/1727651525_0.txt": {
+        "score": 0.5237603629161741,
+        "loss": 0.6751376982830417,
+        "feature_cols": [
+            "shot_distance",
+            "obfuscation_score",
+            "distance_traveled",
+            "shot_angle",
+            "time_within_3_feet"
+        ]
     }
 }

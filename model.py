@@ -1,5 +1,5 @@
 import xgboost as xgb
-from sklearn.metrics import log_loss, roc_auc_score, confusion_matrix
+from sklearn.metrics import log_loss, roc_auc_score, confusion_matrix, accuracy_score
 from os.path import exists
 from constants import MODEL_OUTPUT_LOCATION, MODEL_SCORES_LOCATION
 from time import time
@@ -12,14 +12,13 @@ from random import randint
 def tune_hyperparams(feature_df, feature_cols, target_col):
     X = feature_df[feature_cols]
     y = feature_df[[target_col]]
-    estimator = xgb.XGBClassifier(objective='binary:logistic', booster='gbtree', eval_metric=roc_auc_score)
+    estimator = xgb.XGBClassifier(objective=custom_weighted_log_loss, booster='gbtree', eval_metric=roc_auc_score)
     parameters = {
-        #'max_depth': range (3, 10, 1),
-        #'n_estimators': range(60, 220, 40),
-        #'learning_rate': [0.025, 0.05, 0.1, 0.2],
-        #'subsample': [0.7, 0.9, 1],
-        #'colsample_bytree': [0.8, 1],
-        #'gamma': [0, 1, 2, 3],
+        'max_depth': range (3, 10, 1),
+        'n_estimators': range(50, 80, 10),
+        'learning_rate': [0.01, 0.1, 0.001],
+        'subsample': [0.7, 0.9, 1],
+        'colsample_bytree': [0.6, 0.8, 1],
         'base_score': [0.35, 0.5]
     }
     grid_search = GridSearchCV(
@@ -27,7 +26,7 @@ def tune_hyperparams(feature_df, feature_cols, target_col):
         param_grid=parameters,
         scoring = 'accuracy',
         n_jobs = 10,
-        cv = 2,
+        cv = 4,
         verbose=True
     )
     grid_search.fit(X, y)
@@ -50,7 +49,7 @@ def compare_features(static_df=None, test_cols=[], static_cols=['shot_distance',
     return best_feature, best_score
     
 
-def get_predictions(model_file='', rebuild_model=False, tune_model=False, feature_df=None, feature_cols=None, test_df=None, prod=False, get_score=False, save_model=True, show_feature_importance=False, model_comments=None):
+def get_predictions(model_file='', rebuild_model=False, tune_model=False, feature_df=None, feature_cols=None, test_df=None, prod=False, get_score=False, save_model=True, show_feature_importance=True, model_comments=None):
     model, model_file = get_model(model_file, rebuild_model, feature_df, feature_cols, prod, save_model=save_model, tune_model=tune_model)
     pred_df = predict(model, test_df, feature_cols)
     score = None
@@ -63,11 +62,10 @@ def score_predictions(pred_df, model, model_file, show_output=False, feature_col
     score = roc_auc_score(pred_df['is_made'], pred_df['xMake'])
     loss_score = log_loss(pred_df['is_made'], pred_df['xMake'])
     cols = feature_cols + ['is_made', 'xMake']
-    inspect_df = pred_df[cols]
     if show_output:
         print(f'ROC-AUC Score: {score:.4f}')
         print(f'Loss Score: {loss_score:.4f}')
-    y_pred = pred_df.apply(lambda row: 1 if row['xMake'] > 0.39 else 0, axis=1)
+    y_pred = pred_df.apply(lambda row: 1 if row['xMake'] > 0.46 else 0, axis=1)
     if show_confusion_matrix:
         plot_confusion_matrix(cm=confusion_matrix(pred_df['is_made'], y_pred), target_names=['Miss', 'Make'], normalize=False)
         
@@ -125,9 +123,8 @@ def build_model(df, feature_cols=[], prod=False, save_model=True, tune_model=Fal
                                     ,  colsample_bynode=1, max_depth=4, min_child_weight=1)
     else:
         best_params = tune_hyperparams(df, feature_cols, 'is_made')
-        xg_class = xgb.XGBClassifier(objective=custom_weighted_log_loss, booster='gbtree', subsample=0.7, colsample_bytree=1.0
-                                    , colsample_bynode=1, min_child_weight=1, random_state = 42
-                                    ,**best_params)
+        xg_class = xgb.XGBClassifier(objective='binary:logistic', booster='gbtree', colsample_bynode=1, min_child_weight=1
+                                    ,scale_pos_weight=1.71, **best_params)
     
     xg_class.fit(X_train,y_train, eval_metric=pct_correct_ranks, eval_set=[(X_train, y_train)])
     
@@ -174,7 +171,7 @@ def pct_correct_ranks(y_pred: np.ndarray, y_true: xgb.DMatrix):
 
 def custom_weighted_log_loss(y_true: np.ndarray, y_pred: np.ndarray):
     pred_prob = 1.0/ (1.0 + np.exp(-y_pred))
-    alpha = 10.0
+    alpha = 1
     grad = (pred_prob - y_true) * (y_true * alpha + (1-y_true))
     hess = pred_prob * (1 - pred_prob) * (y_true * alpha + (1 - y_true))
     return grad, hess
@@ -267,3 +264,11 @@ def plot_confusion_matrix(cm,
     plt.ylabel('True label')
     plt.xlabel('Predicted label\naccuracy={:0.4f}; misclass={:0.4f}'.format(accuracy, misclass))
     plt.show()
+    
+    
+    
+def build_output_file(filename='submission.csv', pred_df=None):
+    pred_df.rename(columns={'play_iid': 'ID', 'xMake': 'Target'}, inplace=True)
+    pred_df = pred_df[['ID', 'Target']]
+    pred_df.to_csv(filename, index=False)
+    return
