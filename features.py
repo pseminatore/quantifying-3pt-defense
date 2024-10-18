@@ -13,20 +13,27 @@ def create_feature_df(train=True, test_size=0.2, cache_features=True, use_cache=
     if use_cache and exists(FEATURE_CACHE_LOCATION):
         feature_df = pd.read_csv(FEATURE_CACHE_LOCATION)
     else:
+        print('reading data')
         data = read_data(tracking=True, train=train)
         feature_df = get_play_metadata(data['pbp'])
+        print('distance from hoop')
         feature_df = get_distance_from_hoop(feature_df, data['loc'])
-        #feature_df = get_defenders_distance(feature_df, data['loc'])
+        print('obfuscation')
         feature_df = get_obfuscation_score(feature_df, data['loc'])
+        print('distance traveled')
+        feature_df = get_distance_traveled(feature_df, data['tracking'])
+        print('shot angle')
+        feature_df = get_shot_angle(feature_df, data['loc']) 
+        print('time within radius')
+        feature_df = get_time_5_feet(feature_df, data['tracking'], data['loc'])
         
     ########################################################################
     # Uncached Feature functions need to be added between these comments. 
     # Move function into the `else` block above once it has been cached.
     # Start new features
     ########################################################################
-    data = read_data(train=train)
-    feature_df = get_distance_traveled(feature_df, data['tracking'])
-    feature_df = get_time_5_feet(feature_df,data['tracking'],data['loc'])
+    #data = read_data(train=train, tracking=False)
+    
     
     ########################################################################
     # End new features
@@ -83,7 +90,7 @@ def get_shooter_velocity(frame_num, df_tracking, frames_bef, frames_aft):
     if df_frames.empty or len(df_frames) < 2:
         return np.nan, np.nan
     
-      # Calculate distances between consecutive frames to compute speed
+    # Calculate distances between consecutive frames to compute speed
     df_frames['dx'] = df_frames['x_smooth'].diff()
     df_frames['dy'] = df_frames['y_smooth'].diff()
     
@@ -188,6 +195,32 @@ def get_distance_traveled(feature_df, tracking):
     feature_df = feature_df.merge(right=play_df, how='left', left_on=['play_iid'], right_on=['play_iid'])
     
     return feature_df
+   
+   
+def get_shot_angle(feature_df, locations):
+    locations_df = locations.copy()
+    # Only get necessary columns to keep pivoting straightforward
+    locations_df = locations_df[['play_iid', 'annotation_code', 'court_x', 'court_y']]
+    
+    # Shooter only
+    locations_df = locations_df.loc[locations_df['annotation_code'] == 's']
+    
+    # Standardize to single hoop
+    locations_df['court_x'] = locations_df['court_x'].apply(normalize_to_hoop)
+    
+    # Set origin to hoop location
+    locations_df['court_x'] = locations_df['court_x'] - HOOP_LOCATIONS['L']['x']
+    locations_df['court_y'] = locations_df['court_y'] - HOOP_LOCATIONS['L']['y']
+    
+    # Get everyones angle from hoop (in deg)
+    locations_df['shot_angle'] = (np.arctan2(locations_df['court_x'], locations_df['court_y']) * 180 / np.pi) - 90
+    
+    # Feature and Key only
+    locations_df = locations_df[['play_iid', 'shot_angle']]
+    
+    # Join to feature DF and return
+    feature_df = feature_df.merge(right=locations_df, how='left', left_on=['play_iid'], right_on=['play_iid'])
+    return feature_df
     
     
 def get_obfuscation_score(feature_df, locations, dist_padding=3):
@@ -280,8 +313,10 @@ def get_time_5_feet(feature_df, tracking, locations):
     # Extract the best frame for the given game_id and play_id
     tracking_df = tracking.copy()
     
+    
     # Isolate shooter frames only
     tracking_df = tracking_df.loc[tracking_df['type'] == 'shooter']
+    locations = locations.loc[locations['annotation_code'] == 's']
     
     # Merge the tracking data with the location data to get the shooting position
     tracking_df = tracking_df.merge(locations[['play_iid', 'court_x', 'court_y']], how='left', on='play_iid')
@@ -292,6 +327,14 @@ def get_time_5_feet(feature_df, tracking, locations):
         (tracking_df['y'] - tracking_df['court_y']) ** 2
     )
     
+    # # Get frame of shot
+    # shot_frames = pd.read_csv('best_frames.csv')
+    # shot_frames['play_iid'] = shot_frames['game_id'].astype(str) + '-' + shot_frames['play_id'].astype(str)
+    # tracking_df = tracking_df.merge(shot_frames, how='left', on='play_iid', suffixes=(None, '_shot'))
+    
+    # # Only care about frames prior to shot
+    # tracking_df = tracking_df.loc[tracking_df['frame'] <= tracking_df['frame_shot']]
+    
     # Determine if the player is within 5 feet
     tracking_df['within_5_feet'] = tracking_df['distance_to_shot'] <= 3
     
@@ -299,7 +342,7 @@ def get_time_5_feet(feature_df, tracking, locations):
     play_df = tracking_df.groupby('play_iid')['within_5_feet'].sum().reset_index()
     
     # Rename the column to indicate that this is the number of frames within 5 feet
-    play_df.rename(columns={'within_5_feet': 'time_within_5_feet'}, inplace=True)
+    play_df.rename(columns={'within_5_feet': 'time_within_3_feet'}, inplace=True)
     
     # Join the result to the feature DataFrame
     feature_df = feature_df.merge(right=play_df, how='left', on='play_iid')
